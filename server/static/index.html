@@ -1,0 +1,503 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>agent-backtest-platform</title>
+<link rel="icon" href="/favicon.ico">
+<script src="/static/echarts.min.js"></script>
+<style>
+  :root {
+    --bg: #f4f6fa;
+    --card: #ffffff;
+    --ink: #2b3245;
+    --muted: #8a93a6;
+    --line: #eceff5;
+    --accent: #5b7fff;
+    --accent-soft: #eef2ff;
+    --up: #e0544c;      /* 涨/买入 红 */
+    --down: #1d9e6a;    /* 跌/卖出 绿 */
+    --shadow: 0 2px 14px rgba(43, 50, 69, .07);
+    --radius: 16px;
+  }
+  * { box-sizing: border-box; }
+  body {
+    font-family: system-ui, -apple-system, "PingFang SC", "Microsoft YaHei", sans-serif;
+    margin: 0; padding: 20px 16px 60px;
+    background: linear-gradient(180deg, #eef1f8 0%, var(--bg) 220px);
+    color: var(--ink);
+  }
+  .wrap { max-width: 1080px; margin: 0 auto; }
+  header { padding: 8px 4px 18px; }
+  header h1 { font-size: 22px; margin: 0 0 4px; letter-spacing: .5px; }
+  header p { margin: 0; color: var(--muted); font-size: 13px; }
+
+  .card {
+    background: var(--card); border-radius: var(--radius);
+    box-shadow: var(--shadow); padding: 18px 20px; margin: 0 0 16px;
+  }
+  .card h2 { font-size: 15px; margin: 0 0 14px; display: flex; align-items: center; gap: 10px; }
+  .card h2 .hint { font-weight: 400; font-size: 12px; color: var(--muted); }
+
+  .grid2 { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
+  .grid2 .card { margin: 0; }
+
+  /* 表单 */
+  label { font-size: 13px; color: var(--muted); display: block; margin-bottom: 4px; }
+  input, select {
+    padding: 8px 12px; font-size: 14px; border: 1px solid var(--line);
+    border-radius: 10px; background: #fbfcfe; color: var(--ink); outline: none;
+    transition: border-color .15s, box-shadow .15s;
+  }
+  input:focus, select:focus { border-color: var(--accent); box-shadow: 0 0 0 3px rgba(91,127,255,.12); }
+  .form-row { display: flex; gap: 14px; flex-wrap: wrap; align-items: flex-end; }
+  .form-row > div { display: flex; flex-direction: column; }
+  .form-row .grow { flex: 1; min-width: 180px; }
+
+  button {
+    padding: 8px 18px; font-size: 14px; border: none; border-radius: 10px;
+    background: var(--accent); color: #fff; cursor: pointer;
+    transition: filter .15s, transform .05s;
+  }
+  button:hover { filter: brightness(1.06); }
+  button:active { transform: scale(.98); }
+  button.ghost { background: var(--accent-soft); color: var(--accent); }
+  button.danger { background: #fdecea; color: var(--up); }
+
+  /* 表格 */
+  table { border-collapse: collapse; width: 100%; font-size: 13px; }
+  th { color: var(--muted); font-weight: 500; }
+  th, td { padding: 8px 10px; text-align: right; border: none; }
+  th:first-child, td:first-child { text-align: left; }
+  tbody tr { border-top: 1px solid var(--line); }
+  tbody tr:hover { background: #f8faff; }
+
+  /* 时钟与账户 */
+  .clockDate { font-size: 34px; font-weight: 700; letter-spacing: 1px; }
+  .pill { display: inline-block; padding: 2px 10px; border-radius: 999px;
+          font-size: 12px; background: var(--accent-soft); color: var(--accent); }
+  .pill.done { background: #e8f7f0; color: var(--down); }
+  .big-num { font-size: 24px; font-weight: 700; }
+  .pos { color: var(--up); } .neg { color: var(--down); }
+  .muted { color: var(--muted); font-size: 13px; }
+
+  /* finish 按钮 */
+  #finishBtn {
+    width: 100%; font-size: 17px; font-weight: 600; padding: 16px;
+    border-radius: 14px; letter-spacing: 1px;
+    background: linear-gradient(135deg, #f2705f, #e0544c);
+    box-shadow: 0 4px 14px rgba(224, 84, 76, .25);
+  }
+  #finishBtn:disabled { background: #c6ccd8; box-shadow: none; cursor: not-allowed; }
+
+  /* K线工具行 */
+  .kline-bar { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; margin-bottom: 8px; }
+  #klineChart { width: 100%; height: 470px; }
+  #equityChart { width: 100%; height: 240px; }
+
+  /* 日志 */
+  .log-item { padding: 9px 0; border-top: 1px solid var(--line); font-size: 13px; }
+  .log-item:first-child { border-top: none; }
+  .log-item b { margin-right: 8px; }
+
+  /* 窄屏下表格横向滚动，不挤压换行 */
+  #sessList, #posTable, #orderTable { overflow-x: auto; }
+  #sessList table, #posTable table, #orderTable table { min-width: 560px; }
+
+  .banner {
+    display: none; padding: 12px 16px; border-radius: 12px; margin-bottom: 16px;
+    background: #fff7e6; color: #ad6800; font-size: 13px;
+  }
+
+  /* 响应式 */
+  @media (max-width: 860px) {
+    .grid2 { grid-template-columns: 1fr; }
+    #klineChart { height: 390px; }
+  }
+  @media (max-width: 560px) {
+    body { padding: 12px 10px 40px; }
+    .card { padding: 14px; border-radius: 14px; }
+    .clockDate { font-size: 26px; }
+    .form-row { gap: 10px; }
+    th, td { padding: 6px 6px; font-size: 12px; }
+    #klineChart { height: 330px; }
+    #equityChart { height: 200px; }
+    header h1 { font-size: 18px; }
+  }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <h1>agent-backtest-platform</h1>
+    <p>回合制 A 股回测 · 每个交易日由 Agent 决策后手动推进时钟</p>
+  </header>
+
+  <div class="banner" id="banner"></div>
+
+  <div class="card">
+    <h2>现有会话 <button class="ghost" onclick="loadSessions()">刷新</button></h2>
+    <div id="sessList"><span class="muted">加载中…</span></div>
+  </div>
+
+  <div class="card">
+    <h2>创建会话 <span class="hint">标的留空即为全市场开放模式：Agent 自由查询/交易任意 A 股</span></h2>
+    <div class="form-row">
+      <!-- 以下默认值不再写死：前端启动时调用 /api/config 自动填充（来源：项目根 config.py） -->
+      <div class="grow"><label>标的（可选，逗号分隔）</label>
+        <input id="codes" placeholder="600519.SH,000001.SZ"></div>
+      <div><label>起始日期</label><input id="start" type="date"></div>
+      <div><label>结束日期</label><input id="end" type="date"></div>
+      <div><label>初始资金</label><input id="cash" type="number" style="width:120px"></div>
+      <div><button onclick="createSession()">创建回测</button></div>
+    </div>
+    <div class="muted" id="createMsg" style="margin-top:8px"></div>
+  </div>
+
+  <div id="panel" style="display:none">
+    <div class="grid2">
+      <div class="card" id="clockCard"></div>
+      <div class="card" id="accountCard"></div>
+    </div>
+
+    <div class="card" style="margin-top:16px">
+      <button id="finishBtn" onclick="finishDay()">今日操作完毕，进入下一交易日</button>
+      <div class="muted" id="finishMsg" style="margin-top:8px"></div>
+    </div>
+
+    <div class="card">
+      <h2>K线 <span class="hint">三角为 Agent 买卖点（B 买 / S 卖），蓝色虚线为当前模拟日；支持任意 A 股代码，首次查询自动拉取</span></h2>
+      <div class="kline-bar">
+        <input id="symbolInput" list="cachedCodes" placeholder="如 600519.SH" style="width:150px">
+        <datalist id="cachedCodes"></datalist>
+        <button class="ghost" onclick="drawKline()">查询</button>
+      </div>
+      <div id="klineChart"></div>
+    </div>
+
+    <div class="card">
+      <h2>净值曲线 <span class="hint">灰色虚线为初始资金</span></h2>
+      <div id="equityChart"></div>
+    </div>
+
+    <div class="card"><h2>持仓</h2><div id="posTable"></div></div>
+    <div class="card"><h2>当日委托</h2><div id="orderTable"></div></div>
+    <div class="card"><h2>Agent 决策日志</h2><div id="logList"></div></div>
+  </div>
+</div>
+
+<script>
+let sid = new URLSearchParams(location.search).get("sid");
+let curDate = null;
+let klineChart = null, equityChart = null;
+let lastKline = null, lastTrades = null, lastClock = null;
+
+async function api(path, opts) {
+  const r = await fetch(path, opts);
+  const text = await r.text();
+  let data;
+  try { data = JSON.parse(text); }
+  catch { throw new Error(`请求失败 HTTP ${r.status}: ${(text || r.statusText).slice(0, 120)}`); }
+  if (!r.ok) throw new Error(data.detail || `HTTP ${r.status}`);
+  return data;
+}
+
+function showBanner(msg) {
+  const b = document.getElementById("banner");
+  b.textContent = msg;
+  b.style.display = msg ? "block" : "none";
+}
+
+let APP_CONFIG = null;
+async function loadConfig() {
+  try {
+    APP_CONFIG = await api("/api/config");
+    document.getElementById("codes").value = APP_CONFIG.codes.join(",");
+    document.getElementById("start").value = APP_CONFIG.start;
+    document.getElementById("end").value = APP_CONFIG.end;
+    document.getElementById("cash").value = APP_CONFIG.cash;
+  } catch (e) {
+    showBanner("未能从 /api/config 拉取默认配置，表单暂为空白（" + e.message + "）。");
+  }
+}
+
+async function loadSessions() {
+  try {
+    const items = (await api("/api/sim/sessions")).items;
+    document.getElementById("sessList").innerHTML = items.length
+      ? `<table><thead><tr><th>#</th><th>名称</th><th>区间</th><th>当前日</th><th>状态</th>` +
+        `<th>成交</th><th>最新净值</th><th>操作</th></tr></thead><tbody>` +
+        items.map(s => `<tr><td>${s.session_id}</td><td>${s.name}</td>` +
+          `<td>${s.start_date} ~ ${s.end_date}</td><td>${s.current_date}</td>` +
+          `<td><span class="pill ${s.status === "finished" ? "done" : ""}">${s.status}</span></td>` +
+          `<td>${s.trade_count}</td>` +
+          `<td>${s.last_total_value ? fmt(s.last_total_value) : "-"}</td>` +
+          `<td><button class="ghost" onclick="openSession(${s.session_id})">打开</button> ` +
+          `<button class="danger" onclick="removeSession(${s.session_id})">删除</button></td></tr>`
+        ).join("") + `</tbody></table>`
+      : `<span class="muted">暂无会话，在下方创建一个</span>`;
+  } catch (e) { document.getElementById("sessList").innerHTML = `<span class="muted">${e.message}</span>`; }
+}
+
+function openSession(id) {
+  sid = id;
+  history.replaceState(null, "", "?sid=" + id);
+  document.getElementById("finishMsg").textContent = "";
+  showBanner("");
+  refresh();
+}
+
+async function removeSession(id) {
+  if (!confirm(`确认删除会话 #${id}？其账户、委托、成交、日志将全部删除（行情缓存保留）`)) return;
+  await api(`/api/sim/${id}`, {method: "DELETE"});
+  if (String(sid) === String(id)) {
+    sid = null; document.getElementById("panel").style.display = "none";
+    history.replaceState(null, "", location.pathname);
+  }
+  loadSessions();
+}
+
+async function createSession() {
+  const body = {
+    thscodes: document.getElementById("codes").value.split(",").map(s => s.trim()).filter(Boolean),
+    start: document.getElementById("start").value,
+    end: document.getElementById("end").value,
+    init_cash: +document.getElementById("cash").value,
+  };
+  document.getElementById("createMsg").textContent = "正在拉取历史行情，请稍候…";
+  try {
+    const r = await api("/api/sim/session", {method: "POST",
+      headers: {"Content-Type": "application/json"}, body: JSON.stringify(body)});
+    sid = r.session_id;
+    history.replaceState(null, "", "?sid=" + sid);
+    document.getElementById("createMsg").textContent = "会话 #" + sid + " 已创建";
+    loadSessions();
+    refresh();
+  } catch (e) { document.getElementById("createMsg").textContent = "失败: " + e.message; }
+}
+
+async function finishDay() {
+  const btn = document.getElementById("finishBtn");
+  btn.disabled = true;
+  try {
+    const r = await api(`/api/sim/${sid}/day/finish`, {method: "POST",
+      headers: {"Content-Type": "application/json"},
+      body: JSON.stringify({sim_date: curDate})});
+    document.getElementById("finishMsg").textContent = r.message;
+  } catch (e) { document.getElementById("finishMsg").textContent = "失败: " + e.message; }
+  refresh();
+}
+
+function fmt(n) { return Number(n).toLocaleString("zh-CN", {maximumFractionDigits: 2}); }
+
+async function refresh() {
+  if (!sid) return;
+
+  let c;
+  try {
+    c = await api(`/api/sim/${sid}/clock`);
+  } catch (e) {
+    // 会话不存在或已删除：友好提示并引导选择，不再刷控制台错误
+    document.getElementById("panel").style.display = "none";
+    showBanner(`会话 #${sid} 不存在或已被删除，请从「现有会话」中选择，或创建新会话。`);
+    history.replaceState(null, "", location.pathname);
+    sid = null;
+    loadSessions();
+    return;
+  }
+  showBanner("");
+  document.getElementById("panel").style.display = "block";
+
+  lastClock = c; curDate = c.current_date;
+  document.getElementById("clockCard").innerHTML =
+    `<h2>时钟</h2><div class="clockDate">${c.current_date}</div>` +
+    `<div class="muted" style="margin-top:6px">第 ${c.day_index}/${c.total_days} 个交易日 · ` +
+    `<span class="pill ${c.status === "finished" ? "done" : ""}">${c.status}</span> · 成交价基准 ${c.fill_price}</div>`;
+
+  const inp = document.getElementById("symbolInput");
+  document.getElementById("cachedCodes").innerHTML =
+    c.universe.map(u => `<option value="${u}">`).join("");
+  if (!inp.value) inp.value = c.universe.find(u => u !== "000001.SH") || (APP_CONFIG && APP_CONFIG.stock) || "000001.SH";
+
+  const a = await api(`/api/sim/${sid}/account`);
+  const cls = a.return_pct >= 0 ? "pos" : "neg";
+  document.getElementById("accountCard").innerHTML =
+    `<h2>账户</h2><div class="big-num">${fmt(a.total_value)}</div>` +
+    `<div style="margin-top:4px"><span class="${cls}">${a.return_pct}%</span></div>` +
+    `<div class="muted" style="margin-top:6px">现金 ${fmt(a.cash)} · 持仓市值 ${fmt(a.position_value)}</div>`;
+
+  lastTrades = (await api(`/api/sim/${sid}/trades`)).items;
+  await drawKline();
+  await drawEquity();
+
+  document.getElementById("posTable").innerHTML = a.positions.length
+    ? `<table><thead><tr><th>代码</th><th>持仓</th><th>可卖</th><th>成本</th><th>收盘</th><th>市值</th><th>盈亏</th></tr></thead><tbody>` +
+      a.positions.map(p => `<tr><td>${p.thscode}</td><td>${p.qty}</td><td>${p.available_qty}</td>` +
+        `<td>${p.avg_cost}</td><td>${p.last_close}</td><td>${fmt(p.market_value)}</td>` +
+        `<td class="${p.pnl >= 0 ? "pos" : "neg"}">${p.pnl}</td></tr>`).join("") + `</tbody></table>`
+    : `<span class="muted">空仓</span>`;
+
+  const o = await api(`/api/sim/${sid}/orders?sim_date=${c.current_date}`);
+  document.getElementById("orderTable").innerHTML = o.items.length
+    ? `<table><thead><tr><th>#</th><th>代码</th><th>方向</th><th>数量</th><th>类型</th><th>状态</th><th>成交价</th><th>说明</th></tr></thead><tbody>` +
+      o.items.map(x => `<tr><td>${x.id}</td><td>${x.thscode}</td>` +
+        `<td class="${x.side === "BUY" ? "pos" : "neg"}">${x.side}</td><td>${x.qty}</td>` +
+        `<td>${x.type}</td><td>${x.status}</td><td>${x.fill_price ?? "-"}</td>` +
+        `<td class="muted">${x.message ?? ""}</td></tr>`).join("") + `</tbody></table>`
+    : `<span class="muted">今日尚无委托</span>`;
+
+  const logs = (await api(`/api/sim/${sid}/logs`)).items;
+  document.getElementById("logList").innerHTML = logs.length
+    ? logs.slice().reverse().map(l =>
+        `<div class="log-item"><b>${l.sim_date}</b><span class="muted">${l.note}</span></div>`).join("")
+    : `<span class="muted">暂无（由 Agent 在每日 finish 前写入）</span>`;
+
+  const btn = document.getElementById("finishBtn");
+  btn.disabled = c.status !== "running" || c.today_finished;
+  if (c.status !== "running") btn.textContent = "回测已结束";
+  else if (c.today_finished) btn.textContent = "今日已确认（时钟已推进）";
+  else btn.textContent = "今日操作完毕，进入下一交易日";
+}
+
+async function drawKline() {
+  const symbol = document.getElementById("symbolInput").value.trim();
+  if (!symbol) return;
+  let items;
+  try {
+    items = (await api(`/api/sim/${sid}/kline?thscode=${symbol}&limit=250`)).items;
+  } catch (e) { alert("查询失败: " + e.message); return; }
+  lastKline = items;
+  const dates = items.map(b => b.date);
+  const ohlc = items.map(b => [b.open, b.close, b.low, b.high]); // echarts: [open, close, low, high]
+  const vols = items.map(b => b.volume);
+  const closes = items.map(b => b.close); // 供底部滑块缩略图使用
+
+  const marks = (lastTrades || []).filter(t => t.thscode === symbol);
+  const markPoints = [];
+  for (const t of marks) {
+    const i = dates.indexOf(t.sim_date);
+    if (i < 0) continue;
+    const bar = items[i];
+    const isBuy = t.side === "BUY";
+    markPoints.push({
+      coord: [t.sim_date, isBuy ? bar.low * 0.985 : bar.high * 1.015],
+      name: `${t.sim_date} ${isBuy ? "买入" : "卖出"} ${t.qty}股 @${t.price}`,
+      value: isBuy ? "B" : "S",
+      symbol: "triangle",
+      symbolRotate: isBuy ? 0 : 180,
+      symbolSize: 16,
+      itemStyle: {color: isBuy ? "#e0544c" : "#1d9e6a"},
+      // 字母放在三角形外侧：买入 B 在三角下方，卖出 S 在三角上方
+      label: {fontSize: 11, fontWeight: "bold", distance: 3,
+              position: isBuy ? "bottom" : "top",
+              color: isBuy ? "#e0544c" : "#1d9e6a"},
+    });
+  }
+
+  if (!klineChart) klineChart = echarts.init(document.getElementById("klineChart"));
+  // 价格轴精度：按标的价格量级自适应（高价股2位小数，低价股3位）
+  const refPrice = ohlc.length ? ohlc[ohlc.length - 1][1] : 0;
+  const priceDec = refPrice >= 100 ? 2 : 3;
+  const fmtVol = v => v >= 1e8 ? (v / 1e8).toFixed(1) + "亿"
+                    : v >= 1e4 ? (v / 1e4).toFixed(0) + "万" : v;
+  klineChart.setOption({
+    animation: false,
+    tooltip: {trigger: "axis", axisPointer: {type: "cross"},
+      formatter: params => {
+        const k = params.find(p => p.seriesName === "K线");
+        if (!k) return "";
+        const [o, c, l, h] = k.data.slice(1);
+        const v = params.find(p => p.seriesName === "成交量");
+        const cls = c >= o ? "#e0544c" : "#1d9e6a";
+        return `<b>${k.axisValue}</b><br>` +
+          `开 ${o.toFixed(priceDec)}　收 <span style="color:${cls}">${c.toFixed(priceDec)}</span><br>` +
+          `高 ${h.toFixed(priceDec)}　低 ${l.toFixed(priceDec)}` +
+          (v ? `<br>成交量 ${fmtVol(v.data)}` : "");
+      }},
+    axisPointer: {link: [{xAxisIndex: "all"}]},
+    grid: [{left: 76, right: 32, top: 30, height: "54%"},
+           {left: 76, right: 32, top: "64%", height: "18%"}],
+    xAxis: [
+      {type: "category", data: dates, gridIndex: 0, axisLabel: {show: false},
+       boundaryGap: true},
+      {type: "category", data: dates, gridIndex: 1,
+       axisLabel: {show: true, formatter: d => d.slice(5), color: "#8a93a6",
+                   fontSize: 11, hideOverlap: true, margin: 8,
+                   showMinLabel: true, showMaxLabel: true},
+       axisTick: {show: false}, boundaryGap: true},
+    ],
+    yAxis: [
+      {scale: true, gridIndex: 0, position: "left",
+       axisLabel: {formatter: v => v.toFixed(priceDec), showMinLabel: false},
+       splitLine: {lineStyle: {color: "#f0f0f0"}},
+       // 纵轴留白：上下各扩 8%，避免K线顶到边缘、给买卖标记留位
+       min: v => +(v.min - (v.max - v.min) * 0.08).toFixed(priceDec),
+       max: v => +(v.max + (v.max - v.min) * 0.08).toFixed(priceDec)},
+      {scale: true, gridIndex: 1, splitNumber: 2,
+       axisLabel: {formatter: fmtVol, showMaxLabel: false}, splitLine: {show: false}},
+    ],
+    dataZoom: [{type: "inside", xAxisIndex: [0, 1], start: Math.max(0, 100 - 6000 / dates.length), end: 100},
+               {type: "slider", xAxisIndex: [0, 1], bottom: 0, height: 22,
+                start: Math.max(0, 100 - 6000 / dates.length), end: 100,
+                // 缩略图用收盘价折线（隐藏序列，见 series[0]），并显式配色保证可见
+                dataBackground: {lineStyle: {color: "#8fa1c7", width: 1, opacity: 0.9},
+                                 areaStyle: {color: "#c3cfe8", opacity: 0.35}},
+                selectedDataBackground: {lineStyle: {color: "#5b7fff", width: 1},
+                                         areaStyle: {color: "#5b7fff", opacity: 0.18}},
+                handleStyle: {color: "#5b7fff"},
+                textStyle: {color: "#8a93a6", fontSize: 10}}],
+    series: [
+      // 隐藏收盘价折线：仅用于让底部滑块渲染出走势缩略图（candlestick 无法生成缩略图）
+      {name: "shadow", type: "line", data: closes, xAxisIndex: 0, yAxisIndex: 0,
+       showSymbol: false, silent: true, z: 0, animation: false,
+       lineStyle: {opacity: 0, width: 0}, itemStyle: {opacity: 0},
+       emphasis: {disabled: true}, tooltip: {show: false}, clip: false},
+      {name: "K线", type: "candlestick", data: ohlc, xAxisIndex: 0, yAxisIndex: 0,
+       itemStyle: {color: "#e0544c", color0: "#1d9e6a", borderColor: "#e0544c", borderColor0: "#1d9e6a"},
+       markPoint: {data: markPoints, tooltip: {formatter: p => p.name}},
+       markLine: lastClock ? {symbol: "none",
+         label: {formatter: "今日", position: "end", distance: 4,
+                 color: "#5b7fff", fontSize: 11},
+         lineStyle: {type: "dashed", color: "#5b7fff"},
+         data: [{xAxis: dates.indexOf(lastClock.current_date)}]} : undefined},
+      {name: "成交量", type: "bar", data: vols, xAxisIndex: 1, yAxisIndex: 1,
+       itemStyle: {color: p => ohlc[p.dataIndex][1] >= ohlc[p.dataIndex][0] ? "#e0544c" : "#1d9e6a"}},
+    ],
+  }, true);
+}
+
+async function drawEquity() {
+  const items = (await api(`/api/sim/${sid}/equity`)).items;
+  if (!equityChart) equityChart = echarts.init(document.getElementById("equityChart"));
+  const initCash = items.length ? items[0].total_value : 0;
+  // 纵轴单位自适应：按净值量级和波动幅度选择 万/元，避免小额账户刻度全是"1.0万"
+  const vals = items.map(e => e.total_value);
+  const maxV = vals.length ? Math.max(...vals) : 0;
+  const span = vals.length ? maxV - Math.min(...vals) : 0;
+  const fmtEq = maxV >= 1e6 ? (v => (v / 10000).toFixed(1) + "万")
+              : span >= 2e4 ? (v => (v / 10000).toFixed(2) + "万")
+              : (v => Math.round(v).toLocaleString());
+  equityChart.setOption({
+    animation: false,
+    tooltip: {trigger: "axis",
+      valueFormatter: v => Number(v).toLocaleString("zh-CN", {maximumFractionDigits: 2})},
+    grid: {left: 76, right: 32, top: 20, bottom: 30},
+    xAxis: {type: "category", data: items.map(e => e.sim_date),
+            axisLabel: {hideOverlap: true}},
+    yAxis: {scale: true, axisLabel: {formatter: fmtEq},
+            splitLine: {lineStyle: {color: "#f0f0f0"}}},
+    series: [{name: "总资产", type: "line", data: items.map(e => e.total_value),
+      showSymbol: true, symbolSize: 6, lineStyle: {width: 2, color: "#5b7fff"},
+      itemStyle: {color: "#5b7fff"}, areaStyle: {opacity: 0.08},
+      markLine: {symbol: "none", lineStyle: {type: "dashed", color: "#999"},
+        label: {formatter: "初始资金", position: "insideEndTop", color: "#999"},
+        data: [{yAxis: initCash}]}}],
+  }, true);
+}
+
+window.addEventListener("resize", () => { klineChart && klineChart.resize(); equityChart && equityChart.resize(); });
+loadConfig().then(loadSessions);
+if (sid) refresh();
+</script>
+</body>
+</html>

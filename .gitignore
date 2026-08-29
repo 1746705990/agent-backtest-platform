@@ -1,0 +1,24 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+
+# 运行时产物（回测数据库，含行情缓存，体积大且可重建）
+data/*.db
+data/*.db-journal
+data/*.db-wal
+data/*.db-shm
+
+# 本地环境
+.env
+.venv/
+venv/
+
+# WorkBuddy / 本地工具状态
+.workbuddy/
+.workbuddy-ai/
+
+# 编辑器 / OS
+.idea/
+.vscode/
+.DS_Store
